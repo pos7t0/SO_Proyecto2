@@ -8,7 +8,7 @@ CXXFLAGS = -Wall -Wextra -std=c++17
 
 # Archivos fuente
 CLIENTE_SRC = Cliente.cpp
-SERVIDOR_SRC = servidorLab4.cpp
+SERVIDOR_SRC = Servidor.cpp
 
 # Compilar cliente
 cliente: $(CLIENTE_SRC)
