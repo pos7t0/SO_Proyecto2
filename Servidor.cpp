@@ -70,6 +70,7 @@ private:
                     if (contadores[sockCliente] >= LIMITE_MENSAJES) {
                     std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. No puedes enviar más.\n";
                     send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
+                    close(sockCliente);
                     break;  // Salir del bucle, ya no se procesan más mensajes
                 }
 
