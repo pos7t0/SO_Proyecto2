@@ -10,7 +10,7 @@
 
 #define PORT 8000
 #define BUFFERSIZE 1024
-
+#define LIMITE_MENSAJES 5 
 
 class Servidor {
 private:
@@ -66,6 +66,13 @@ private:
                 send(sockCliente, despedida.c_str(), despedida.size(), 0);
                 break;
             } else {
+
+                    if (contadores[sockCliente] >= LIMITE_MENSAJES) {
+                    std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. No puedes enviar más.\n";
+                    send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
+                    break;  // Salir del bucle, ya no se procesan más mensajes
+                }
+
                 // Incrementar el contador de mensajes del cliente
                 contadores[sockCliente]++;
 
