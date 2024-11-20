@@ -1,152 +1,140 @@
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#include <iostream>
+#include <cstring>
 #include <thread>
+#include <unistd.h>
+#include <sstream>  // Para std::istringstream
+#include <algorithm>  // Para std::reverse
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
-#define port 8000
+#define PORT 8000
 #define BUFFERSIZE 1024
 
-void crearSocket(int *sock){
-    if ((*sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {        
-        printf("Error Creación de Socket\n");
-        exit(0);
-    }
-}
+class Servidor {
+private:
+    int sockServidor;
+    struct sockaddr_in confServidor;
 
-void configurarServidor(int socket, struct sockaddr_in *conf){
-    conf->sin_family = AF_INET;		   		    // Dominio
-    conf->sin_addr.s_addr = htonl(INADDR_ANY);	// Enlazar con cualquier dirección local
-    conf->sin_port = htons(port);				// Puerto donde escucha
+    // Configura el socket del servidor
+    void configurarServidor() {
+        confServidor.sin_family = AF_INET;
+        confServidor.sin_addr.s_addr = INADDR_ANY;
+        confServidor.sin_port = htons(PORT);
 
-    if ((bind(socket, (struct sockaddr *) conf, sizeof(*conf))) < 0) { // bind!
-        printf("Error de enlace\n");
-        exit(0);
-    }
-}
-
-void escucharClientes(int sock, int n){
-    if (listen(sock, n) < 0) {		
-        printf("Error listening\n");
-        exit(0);
-    }
-}
-
-void reemplazarCaracter(char *buffer, char caracter1, char caracter2){
-    for(int j=0; j < strlen(buffer); j++){
-        if (buffer[j] == caracter1){
-            buffer[j] = caracter2;
+        if (bind(sockServidor, (struct sockaddr*)&confServidor, sizeof(confServidor)) < 0) {
+            std::cerr << "Error de enlace (bind)\n";
+            exit(EXIT_FAILURE);
         }
-    }              
-}
+    }
 
-void invertirPalabra(char *palabra){  
-    int largo = strlen(palabra);
-    char palabra2[largo];
-    
-    for (int i = 0; i < largo; i++)  {  
-        palabra2[i] = palabra[largo - i - 1];  
-    }  
-    
-    palabra2[largo] = '\0';
-    strcpy(palabra, palabra2);
-}  
+    // Inicia la escucha de clientes
+    void escucharClientes(int nClientes) {
+        if (listen(sockServidor, nClientes) < 0) {
+            std::cerr << "Error al escuchar (listen)\n";
+            exit(EXIT_FAILURE);
+        }
+    }
 
-// Función para manejar cada cliente en un hilo separado
-void manejarCliente(int sockCliente) {
-    int primerMensaje = 1;
-    char nombre[BUFFERSIZE] = {0};
-
-    while(1) {
+    // Maneja la comunicación con un cliente
+    void manejarCliente(int sockCliente) {
         char buffer[BUFFERSIZE] = {0};
-        char buffer2[BUFFERSIZE] = {0};
-        int valread = read(sockCliente, buffer, BUFFERSIZE);
+        bool primerMensaje = true;
+        std::string nombreCliente;
 
-        if (primerMensaje) {
-            strcpy(buffer2, "Hola ");
-            strcat(buffer2, buffer);
-            strcat(buffer2, "\n");
-            strcpy(nombre, buffer);
+        while (true) {
+            memset(buffer, 0, BUFFERSIZE);
+            int valread = read(sockCliente, buffer, BUFFERSIZE - 1);
 
-            printf("%s", buffer2);
-            send(sockCliente, buffer2, strlen(buffer2), 0);
-            primerMensaje = 0;
-        } else {
-            if (strcmp(buffer, "BYE\n") == 0) {
-                strcpy(buffer2, buffer);
-                strcat(buffer2, nombre);
-                send(sockCliente, buffer2, strlen(buffer2), 0);
-
-                printf("%s", buffer2);                    
+            if (valread <= 0) {
+                std::cout << "Cliente desconectado.\n";
                 break;
             }
 
-            printf("%s", buffer);
-            
-            char buffer2[1024] = {0};
-            char *palabra = strtok(buffer, " ");
-            int primeraPalabra = 1;
+            buffer[valread] = '\0';  // Asegura terminación
+            std::cout << "Mensaje recibido: " << buffer << std::endl;
 
-            while (palabra != NULL) {
-                if (palabra[strlen(palabra)-1] == '\n') {
-                    palabra[strlen(palabra)-1] = '\0';
-                }
-                
-                invertirPalabra(palabra);     
-                
-                if (primeraPalabra) {
-                    strcpy(buffer2, palabra);
-                    primeraPalabra = 0;
-                } else {
-                    strcat(buffer2, " "); 
-                    strcat(buffer2, palabra);
-                }
-                palabra = strtok(NULL, " ");
+            if (primerMensaje) {
+                nombreCliente = buffer;
+                std::string mensajeBienvenida = "Hola " + nombreCliente + "\n";
+                send(sockCliente, mensajeBienvenida.c_str(), mensajeBienvenida.size(), 0);
+                primerMensaje = false;
+            } else if (strcmp(buffer, "BYE\n") == 0) {
+                std::string despedida = "Adiós " + nombreCliente + "\n";
+                send(sockCliente, despedida.c_str(), despedida.size(), 0);
+                break;
+            } else {
+                // Invertir palabras recibidas
+                std::string mensajeInvertido = invertirPalabras(buffer);
+                send(sockCliente, mensajeInvertido.c_str(), mensajeInvertido.size(), 0);
             }
-
-            send(sockCliente, buffer2, strlen(buffer2), 0);
-        }    
-    }
-
-    close(sockCliente);
-}
-
-int main(int argc, char *argv[]){
-    if (argc < 2)
-        return 0;
-    
-    int nClientes = strtol(argv[1], NULL, 10);
-    
-    if (nClientes < 1)
-       return 0;
-
-    int sockServidor;
-    crearSocket(&sockServidor);
-
-    struct sockaddr_in confServidor;
-    configurarServidor(sockServidor, &confServidor);
-
-    escucharClientes(sockServidor, nClientes);
-
-    struct sockaddr_in confCliente;
-    socklen_t tamannoConf = sizeof(confCliente);
-
-    for(int i = 0; i < nClientes; i++){
-        int sockCliente;
-        sockCliente = accept(sockServidor, (struct sockaddr *) &confCliente, &tamannoConf);
-
-        if (sockCliente < 0) {
-            printf("Error accepting\n");
-            continue;
         }
 
-        // Crear un hilo para cada cliente
-        std::thread(manejarCliente, sockCliente).detach();
+        close(sockCliente);
     }
 
-    close(sockServidor);
+    // Invierte las palabras en un mensaje
+    std::string invertirPalabras(const std::string& mensaje) {
+    std::string resultado, palabra;
+    std::istringstream stream(mensaje);  // Dividir la cadena en palabras
+
+    while (stream >> palabra) {  // Extrae palabra por palabra
+        std::reverse(palabra.begin(), palabra.end());  // Invierte la palabra
+        resultado += palabra + " ";  // Agrega la palabra invertida al resultado
+    }
+
+    if (!resultado.empty())
+        resultado.pop_back();  // Elimina el último espacio sobrante
+
+    return resultado;
+}
+
+public:
+    Servidor(int nClientes) {
+        if ((sockServidor = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+            std::cerr << "Error al crear el socket\n";
+            exit(EXIT_FAILURE);
+        }
+
+        configurarServidor();
+        escucharClientes(nClientes);
+
+        std::cout << "Servidor iniciado y esperando clientes...\n";
+
+        struct sockaddr_in confCliente;
+        socklen_t tamannoConf = sizeof(confCliente);
+
+        for (int i = 0; i < nClientes; ++i) {
+            int sockCliente = accept(sockServidor, (struct sockaddr*)&confCliente, &tamannoConf);
+
+            if (sockCliente < 0) {
+                std::cerr << "Error aceptando cliente\n";
+                continue;
+            }
+
+            std::cout << "Cliente conectado desde: " << inet_ntoa(confCliente.sin_addr) << std::endl;
+
+            // Maneja cada cliente en un hilo separado
+            std::thread(&Servidor::manejarCliente, this, sockCliente).detach();
+        }
+    }
+
+    ~Servidor() {
+        close(sockServidor);
+    }
+};
+
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Uso: " << argv[0] << " <número de clientes>\n";
+        return 1;
+    }
+
+    int nClientes = std::stoi(argv[1]);
+    if (nClientes < 1) {
+        std::cerr << "Número de clientes inválido.\n";
+        return 1;
+    }
+
+    Servidor servidor(nClientes);
     return 0;
 }
