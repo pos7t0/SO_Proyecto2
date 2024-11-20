@@ -55,19 +55,22 @@ public:
                 primerMensaje = false;
 
                 // Leer la respuesta del servidor
-                int valread = read(sockCliente, buffer, BUFFERSIZE);
+                //int valread = read(sockCliente, buffer, BUFFERSIZE);
+               memset(buffer, 0, BUFFERSIZE); // Limpiar el buffer 
+               read(sockCliente, buffer, BUFFERSIZE);
                 std::cout << buffer;
             } else {
-                std::cout << "Mensaje: ";
+                std::cout << "\nMensaje: ";
                 std::string mensaje;
                 std::getline(std::cin, mensaje);
 
-                if (mensaje == "BYE") {
+                if (mensaje == "BYE\n") {
                     // Enviar mensaje de despedida
                     send(sockCliente, mensaje.c_str(), mensaje.size(), 0);
 
                     // Leer la respuesta del servidor
-                    int valread = read(sockCliente, bufferRespuesta, BUFFERSIZE);
+                    memset(buffer, 0, BUFFERSIZE); // Limpiar el buffer
+                    /*int valread =*/ read(sockCliente, bufferRespuesta, BUFFERSIZE);
                     std::cout << bufferRespuesta << nombreCliente << std::endl;
 
                     break;
@@ -76,7 +79,8 @@ public:
                     send(sockCliente, mensaje.c_str(), mensaje.size(), 0);
 
                     // Leer la respuesta del servidor
-                    int valread = read(sockCliente, buffer, BUFFERSIZE);
+                    memset(buffer, 0, BUFFERSIZE); // Limpiar el buffer
+                    /*int valread =*/ read(sockCliente, buffer, BUFFERSIZE);
                     std::cout << buffer;
                 }
             }
