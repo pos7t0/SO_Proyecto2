@@ -44,78 +44,76 @@ private:
     }
 
     void manejarCliente(int sockCliente) {
-    char buffer[BUFFERSIZE] = {0};
-    bool primerMensaje = true;
-    std::string nombreCliente;
+        char buffer[BUFFERSIZE] = {0};
+        bool primerMensaje = true;
+        std::string nombreCliente;
 
-    contadores[sockCliente] = 0;  // Initialize message counter
-    bloqueados[sockCliente] = false;  // Initialize as not blocked
+        contadores[sockCliente] = 0;  // Initialize message counter
+        bloqueados[sockCliente] = false;  // Initialize as not blocked
 
-    while (true) {
-        memset(buffer, 0, BUFFERSIZE);
-        int valread = read(sockCliente, buffer, BUFFERSIZE - 1);
+        while (true) {
+            memset(buffer, 0, BUFFERSIZE);
+            int valread = read(sockCliente, buffer, BUFFERSIZE - 1);
 
-        if (valread <= 0) {
-            std::cout << "Cliente desconectado.\n";
-            break;
-        }
+            if (valread <= 0) {
+                std::cout << "Cliente desconectado.\n";
+                break;
+            }
 
-        buffer[valread] = '\0';  // Ensure null-terminated string
+            buffer[valread] = '\0';  // Ensure null-terminated string
 
-        // Check if the client is blocked before processing or logging the message
-        {
-            std::unique_lock<std::mutex> lock(bloqueoMutex);
-            if (bloqueados[sockCliente]) {
-                std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Espera un momento antes de enviar más.\n";
-                send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
+            // Check if the client is blocked before processing or logging the message
+            {
+                std::unique_lock<std::mutex> lock(bloqueoMutex);
+                if (bloqueados[sockCliente]) {
+                    std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Espera un momento antes de enviar más.\n";
+                    send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
+                    continue;
+                }
+            }
+
+            if (primerMensaje) {
+                nombreCliente = buffer;
+                std::string mensajeBienvenida = "Hola " + nombreCliente + "\n";
+                send(sockCliente, mensajeBienvenida.c_str(), mensajeBienvenida.size(), 0);
+                primerMensaje = false;
                 continue;
             }
-        }
 
-        if (primerMensaje) {
-            nombreCliente = buffer;
-            std::string mensajeBienvenida = "Hola " + nombreCliente + "\n";
-            send(sockCliente, mensajeBienvenida.c_str(), mensajeBienvenida.size(), 0);
-            primerMensaje = false;
-            continue;
-        }
-
-        if (strcmp(buffer, "BYE\n") == 0) {
-            std::string despedida = "Adiós " + nombreCliente + "\n";
-            send(sockCliente, despedida.c_str(), despedida.size(), 0);
-            break;
-        }
-
-        contadores[sockCliente]++;
-
-        // Block the client if the message count exceeds the limit
-        if (contadores[sockCliente] > LIMITE_MENSAJES) {
-            {
-                std::lock_guard<std::mutex> lock(bloqueoMutex);
-                bloqueados[sockCliente] = true;
+            if (strcmp(buffer, "BYE\n") == 0) {
+                std::string despedida = "Adiós " + nombreCliente + "\n";
+                send(sockCliente, despedida.c_str(), despedida.size(), 0);
+                break;
             }
-            std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Estás temporalmente bloqueado.\n";
-            send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
-            continue;  // Do not log or process the message
+
+            contadores[sockCliente]++;
+
+            // Block the client if the message count exceeds the limit
+            if (contadores[sockCliente] > LIMITE_MENSAJES) {
+                {
+                    std::lock_guard<std::mutex> lock(bloqueoMutex);
+                    bloqueados[sockCliente] = true;
+                }
+                std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Estás temporalmente bloqueado.\n";
+                send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
+                continue;  // Do not log or process the message
+            }
+
+            // Log and process the message only if the client is not blocked
+            std::cout << "Mensaje recibido: " << buffer << std::endl;
+
+            std::string mensajeInvertido = invertirPalabras(buffer);
+            mensajeInvertido += "\nMensajes enviados por ti: " + std::to_string(contadores[sockCliente]) + "\n";
+            send(sockCliente, mensajeInvertido.c_str(), mensajeInvertido.size(), 0);
         }
 
-        // Log and process the message only if the client is not blocked
-        std::cout << "Mensaje recibido: " << buffer << std::endl;
-
-        std::string mensajeInvertido = invertirPalabras(buffer);
-        mensajeInvertido += "\nMensajes enviados por ti: " + std::to_string(contadores[sockCliente]) + "\n";
-        send(sockCliente, mensajeInvertido.c_str(), mensajeInvertido.size(), 0);
+        {
+            std::lock_guard<std::mutex> lock(bloqueoMutex);
+            bloqueados.erase(sockCliente);
+            contadores.erase(sockCliente);
+        }
+        close(sockCliente);
     }
-
-    {
-        std::lock_guard<std::mutex> lock(bloqueoMutex);
-        bloqueados.erase(sockCliente);
-        contadores.erase(sockCliente);
-    }
-    close(sockCliente);
-}
-
-
 
     void desbloquearClientes() {
         while (true) {
