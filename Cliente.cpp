@@ -46,7 +46,6 @@ public:
     void iniciarComunicacion() {
         bool primerMensaje = true;
         char buffer[BUFFERSIZE] = {0};
-        char bufferRespuesta[BUFFERSIZE] = {0};
 
         while (true) {
             if (primerMensaje) {
@@ -55,50 +54,47 @@ public:
                 primerMensaje = false;
 
                 // Leer la respuesta del servidor
-                //int valread = read(sockCliente, buffer, BUFFERSIZE);
-               memset(buffer, 0, BUFFERSIZE); // Limpiar el buffer 
-               read(sockCliente, buffer, BUFFERSIZE);
+                read(sockCliente, buffer, BUFFERSIZE);
                 std::cout << buffer;
             } else {
                 std::cout << "\nMensaje: ";
                 std::string mensaje;
                 std::getline(std::cin, mensaje);
 
-                if (mensaje == "BYE\n") {
+                if (mensaje == "BYE") {
                     // Enviar mensaje de despedida
                     send(sockCliente, mensaje.c_str(), mensaje.size(), 0);
 
                     // Leer la respuesta del servidor
-                    memset(buffer, 0, BUFFERSIZE); // Limpiar el buffer
-                    /*int valread =*/ read(sockCliente, bufferRespuesta, BUFFERSIZE);
-                    std::cout << bufferRespuesta << nombreCliente << std::endl;
+                    read(sockCliente, buffer, BUFFERSIZE);
+                    std::cout << buffer;
 
-                    break;
-                } else {
-                    // Enviar el mensaje al servidor
-                    send(sockCliente, mensaje.c_str(), mensaje.size(), 0);
-                    
-                    // Leer la respuesta del servidor
-                    memset(buffer, 0, BUFFERSIZE); // Limpiar el buffer antes de usarlo
-                    int valread = read(sockCliente, buffer, BUFFERSIZE);
-                    
-                    if (valread <= 0) {
-                        std::cout << "Conexión cerrada por el servidor.\n";
-                        break;  // Salir del bucle si el servidor cerró la conexión
-                    }
-
-                    // Procesar solo los datos válidos leídos
-                    std::string respuestaServidor(buffer, valread);
-                    
-                    // Mostrar la respuesta
-                    std::cout << respuestaServidor;
-
-                    // Verificar si el servidor indicó que se alcanzó el límite
-                    if (respuestaServidor.find("Has alcanzado el límite de mensajes") != std::string::npos) {
-                        std::cout << "No puedes enviar más mensajes. Intenta más tarde.\n";
-                        break;  // Salir del bucle de comunicación
-                    }
+                    break;  // Salir del bucle después de enviar BYE
                 }
+
+                // Enviar el mensaje al servidor
+                send(sockCliente, mensaje.c_str(), mensaje.size(), 0);
+
+                // Leer la respuesta del servidor
+                memset(buffer, 0, BUFFERSIZE);
+                int valread = read(sockCliente, buffer, BUFFERSIZE);
+
+                if (valread <= 0) {
+                    std::cout << "Conexión cerrada por el servidor.\n";
+                    break;
+                }
+
+                std::string respuesta(buffer, valread);
+
+                // Manejar mensajes de límite
+                if (respuesta.find("Has alcanzado el límite de mensajes") != std::string::npos) {
+                    std::cout << respuesta << "\n";
+                    std::cout << "No puedes enviar más mensajes, pero seguirás conectado.\n";
+                    continue;  // Continuar sin desconectar
+                }
+
+                // Mostrar la respuesta del servidor
+                std::cout << respuesta;
             }
         }
     }
