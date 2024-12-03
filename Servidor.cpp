@@ -3,13 +3,12 @@
 #include <thread>
 #include <unistd.h>
 #include <map>
-#include <sstream>  // Para std::istringstream
-#include <algorithm>  // Para std::reverse
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <condition_variable>
 #include <unordered_map>
 #include <mutex>
+#include <chrono> // For timestamps
 
 #define PORT 8000
 #define BUFFERSIZE 1024
@@ -19,10 +18,11 @@ class Servidor {
 private:
     int sockServidor;
     struct sockaddr_in confServidor;
-    std::map<int, int> contadores; // Mapa de contadores por cliente
-    
+    std::map<int, int> contadores; // Map of message counters per client
+
     std::mutex bloqueoMutex;  // Mutex to synchronize access
     std::unordered_map<int, bool> bloqueados; // Map of blocked clients
+    std::unordered_map<int, std::chrono::time_point<std::chrono::steady_clock>> bloqueosTiempo; // Map of block timestamps
     std::condition_variable bloqueoCV;  // Condition variable for blocked clients
 
     void configurarServidor() {
@@ -62,13 +62,24 @@ private:
 
             buffer[valread] = '\0';  // Ensure null-terminated string
 
-            // Check if the client is blocked before processing or logging the message
+            // Check if the client is blocked
             {
                 std::unique_lock<std::mutex> lock(bloqueoMutex);
                 if (bloqueados[sockCliente]) {
-                    std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Espera un momento antes de enviar más.\n";
-                    send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
-                    continue;
+                    // Calculate remaining block time
+                    auto now = std::chrono::steady_clock::now();
+                    auto tiempoBloqueo = std::chrono::duration_cast<std::chrono::seconds>(now - bloqueosTiempo[sockCliente]);
+                    int segundosRestantes = 60 - tiempoBloqueo.count();
+
+                    if (segundosRestantes > 0) {
+                        std::string mensajeBloqueo = "Estás bloqueado. Tiempo restante: " + std::to_string(segundosRestantes) + " segundos.\n";
+                        send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
+                        continue;
+                    } else {
+                        // Unblock the client if the block duration has elapsed
+                        bloqueados[sockCliente] = false;
+                        contadores[sockCliente] = 0;  // Reset message counter
+                    }
                 }
             }
 
@@ -93,24 +104,25 @@ private:
                 {
                     std::lock_guard<std::mutex> lock(bloqueoMutex);
                     bloqueados[sockCliente] = true;
+                    bloqueosTiempo[sockCliente] = std::chrono::steady_clock::now();  // Store block start time
                 }
-                std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Estás temporalmente bloqueado.\n";
+                std::string mensajeBloqueo = "Has alcanzado el límite de mensajes. Estás temporalmente bloqueado por 60 segundos.\n";
                 send(sockCliente, mensajeBloqueo.c_str(), mensajeBloqueo.size(), 0);
                 continue;  // Do not log or process the message
             }
 
-            // Log and process the message only if the client is not blocked
+            // Log and acknowledge the message
             std::cout << "Mensaje recibido: " << buffer << std::endl;
 
-            std::string mensajeInvertido = invertirPalabras(buffer);
-            mensajeInvertido += "\nMensajes enviados por ti: " + std::to_string(contadores[sockCliente]) + "\n";
-            send(sockCliente, mensajeInvertido.c_str(), mensajeInvertido.size(), 0);
+            std::string acknowledgement = "Mensaje recibido correctamente. Mensajes enviados por ti: " + std::to_string(contadores[sockCliente]) + "\n";
+            send(sockCliente, acknowledgement.c_str(), acknowledgement.size(), 0);
         }
 
         {
             std::lock_guard<std::mutex> lock(bloqueoMutex);
             bloqueados.erase(sockCliente);
             contadores.erase(sockCliente);
+            bloqueosTiempo.erase(sockCliente);  // Clean up block timestamp
         }
         close(sockCliente);
     }
@@ -130,21 +142,6 @@ private:
 
             bloqueoCV.notify_all();  // Notify any threads waiting on the condition variable
         }
-    }
-
-    std::string invertirPalabras(const std::string& mensaje) {
-        std::string resultado, palabra;
-        std::istringstream stream(mensaje);
-
-        while (stream >> palabra) {
-            std::reverse(palabra.begin(), palabra.end());
-            resultado += palabra + " ";
-        }
-
-        if (!resultado.empty())
-            resultado.pop_back();  // Remove the last space
-
-        return resultado;
     }
 
 public:
