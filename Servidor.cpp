@@ -186,8 +186,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int nClientes = std::stoi(argv[1]);
-    if (nClientes < 1) {
+    int nClientes = 1 + std::stoi(argv[1]);
+    if (nClientes < 2) {
         std::cerr << "Número de clientes inválido.\n";
         return 1;
     }
