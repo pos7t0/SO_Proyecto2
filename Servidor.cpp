@@ -8,17 +8,18 @@
 #include <condition_variable>
 #include <unordered_map>
 #include <mutex>
-#include <chrono> // For timestamps
+#include <chrono>
 
 #define PORT 8000
 #define BUFFERSIZE 1024
-#define LIMITE_MENSAJES 5 
+#define LIMITE_MENSAJES 5
 
 class Servidor {
 private:
     int sockServidor;
     struct sockaddr_in confServidor;
     std::map<int, int> contadores; // Map of message counters per client
+    std::unordered_map<int, std::string> nombresClientes; // Map to store the names of the clients
 
     std::mutex bloqueoMutex;  // Mutex to synchronize access
     std::unordered_map<int, bool> bloqueados; // Map of blocked clients
@@ -85,6 +86,7 @@ private:
 
             if (primerMensaje) {
                 nombreCliente = buffer;
+                nombresClientes[sockCliente] = nombreCliente; // Store the client's name
                 std::string mensajeBienvenida = "Hola " + nombreCliente + "\n";
                 send(sockCliente, mensajeBienvenida.c_str(), mensajeBienvenida.size(), 0);
                 primerMensaje = false;
@@ -111,8 +113,8 @@ private:
                 continue;  // Do not log or process the message
             }
 
-            // Log and acknowledge the message
-            std::cout << "Mensaje recibido: " << buffer << std::endl;
+            // Log and acknowledge the message with the client's name
+            std::cout << "Mensaje recibido de " << nombreCliente << ": " << buffer << std::endl;
 
             std::string acknowledgement = "Mensaje recibido correctamente. Mensajes enviados por ti: " + std::to_string(contadores[sockCliente]) + "\n";
             send(sockCliente, acknowledgement.c_str(), acknowledgement.size(), 0);
@@ -122,6 +124,7 @@ private:
             std::lock_guard<std::mutex> lock(bloqueoMutex);
             bloqueados.erase(sockCliente);
             contadores.erase(sockCliente);
+            nombresClientes.erase(sockCliente);  // Clean up the client's name
             bloqueosTiempo.erase(sockCliente);  // Clean up block timestamp
         }
         close(sockCliente);
