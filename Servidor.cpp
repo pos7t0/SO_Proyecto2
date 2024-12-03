@@ -131,21 +131,32 @@ private:
     }
 
     void desbloquearClientes() {
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(60));
-            std::lock_guard<std::mutex> lock(bloqueoMutex);
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(1)); // Check every second for more precise timing
+        std::lock_guard<std::mutex> lock(bloqueoMutex);
 
-            for (auto& [cliente, estado] : bloqueados) {
-                if (estado) {
+        auto now = std::chrono::steady_clock::now();
+        for (auto it = bloqueados.begin(); it != bloqueados.end(); /* no increment here */) {
+            int cliente = it->first;
+
+            if (it->second) { // Check if client is currently blocked
+                auto tiempoBloqueo = std::chrono::duration_cast<std::chrono::seconds>(now - bloqueosTiempo[cliente]);
+
+                if (tiempoBloqueo.count() >= 60) {
                     std::cout << "Desbloqueando cliente " << cliente << "\n";
-                    estado = false;
+                    it = bloqueados.erase(it); // Remove client from blocked list
                     contadores[cliente] = 0;  // Reset message counter
+                    bloqueosTiempo.erase(cliente); // Clean up block timestamp
+                } else {
+                    ++it; // Move to the next client
                 }
+            } else {
+                ++it; // Move to the next client if not blocked
             }
-
-            bloqueoCV.notify_all();  // Notify any threads waiting on the condition variable
         }
     }
+}
+
 
 public:
     Servidor(int nClientes) {
