@@ -24,7 +24,6 @@ private:
     std::mutex bloqueoMutex;  // Mutex para sincronizar el acceso
     std::unordered_map<int, bool> bloqueados; // Mapa de clientes bloqueados
     std::unordered_map<int, std::chrono::time_point<std::chrono::steady_clock>> bloqueosTiempo; // Mapa de marcas de tiempo de bloqueo
-    std::condition_variable bloqueoCV;  // Variable de condición para los clientes bloqueados
 
     void configurarServidor() {
         confServidor.sin_family = AF_INET;
